@@ -1,7 +1,8 @@
-import { transformInteraction, kCommands, type CommandMap, logger } from "@yuudachi/framework";
+import { kCommands, type CommandMap, logger, transformApplicationInteraction } from "@yuudachi/framework";
 import type { Event } from "@yuudachi/framework/types";
-import { ApplicationCommandType, Events, Client } from "discord.js";
+import { ApplicationCommandType, Events, Client, PermissionFlagsBits, ButtonStyle, ComponentType } from "discord.js";
 import { injectable, inject } from "tsyringe";
+import { CUSTOM_ID_SEPARATOR } from "../util/constants.js";
 
 @injectable()
 export default class implements Event {
@@ -13,16 +14,77 @@ export default class implements Event {
 
 	public execute() {
 		this.client.on(this.event, async (interaction) => {
+			if (!interaction.inCachedGuild()) {
+				return;
+			}
+
+			if (interaction.isButton()) {
+				try {
+					const [idPrefix] = interaction.customId.split(CUSTOM_ID_SEPARATOR);
+					switch (idPrefix) {
+						case "solved": {
+							const { channel, member, channelId } = interaction;
+							if (!channel?.isThread()) {
+								return;
+							}
+
+							if (
+								channel.ownerId !== interaction.user.id &&
+								!member.permissionsIn(channelId).has(PermissionFlagsBits.ManageMessages)
+							) {
+								await interaction.reply({
+									ephemeral: true,
+									content: "Only the original poster or support staff can mark a post as resolved!",
+								});
+								return;
+							}
+
+							await interaction.update({
+								content: [
+									interaction.message.content,
+									`- \`✅\` Marked as resolved by ${interaction.user.id === channel.ownerId ? "OP" : "staff"}`,
+								].join("\n"),
+								components: [
+									{
+										type: ComponentType.ActionRow,
+										components: [
+											{
+												type: ComponentType.Button,
+												customId: "solved",
+												style: ButtonStyle.Secondary,
+												label: "Resolved",
+												emoji: "🔒",
+												disabled: true,
+											},
+										],
+									},
+								],
+							});
+
+							await channel.edit({
+								locked: true,
+								archived: true,
+								reason: `Resolved by ${interaction.user.username} (${interaction.user.id})`,
+							});
+
+							break;
+						}
+
+						default:
+							break;
+					}
+				} catch (error_) {
+					const error = error_ as Error;
+					logger.error(error, error.message);
+				}
+			}
+
 			if (
 				!interaction.isCommand() &&
 				!interaction.isUserContextMenuCommand() &&
 				!interaction.isMessageContextMenuCommand() &&
 				!interaction.isAutocomplete()
 			) {
-				return;
-			}
-
-			if (!interaction.inCachedGuild()) {
 				return;
 			}
 
@@ -39,10 +101,10 @@ export default class implements Event {
 							);
 
 							if (isAutocomplete) {
-								await command.autocomplete(interaction, transformInteraction(interaction.options.data), "");
+								await command.autocomplete(interaction, transformApplicationInteraction(interaction.options.data), "");
 								break;
 							} else {
-								await command.chatInput(interaction, transformInteraction(interaction.options.data), "");
+								await command.chatInput(interaction, transformApplicationInteraction(interaction.options.data), "");
 								break;
 							}
 						}
@@ -53,7 +115,7 @@ export default class implements Event {
 								`Executing message context command ${interaction.commandName}`,
 							);
 
-							await command.messageContext(interaction, transformInteraction(interaction.options.data), "");
+							await command.messageContext(interaction, transformApplicationInteraction(interaction.options.data), "");
 							break;
 						}
 
@@ -63,7 +125,7 @@ export default class implements Event {
 								`Executing user context command ${interaction.commandName}`,
 							);
 
-							await command.userContext(interaction, transformInteraction(interaction.options.data), "");
+							await command.userContext(interaction, transformApplicationInteraction(interaction.options.data), "");
 							break;
 						}
 

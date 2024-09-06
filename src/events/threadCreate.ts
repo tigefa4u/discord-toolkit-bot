@@ -3,7 +3,7 @@ import { setTimeout as wait } from "node:timers/promises";
 import { logger } from "@yuudachi/framework";
 import type { Event } from "@yuudachi/framework/types";
 import type { ThreadChannel } from "discord.js";
-import { Events, Client } from "discord.js";
+import { Events, Client, ComponentType, ButtonStyle } from "discord.js";
 import { injectable } from "tsyringe";
 import { ASSISTCHANNELS } from "../util/constants.js";
 
@@ -20,17 +20,46 @@ export default class implements Event {
 			[ThreadChannel, boolean]
 		>) {
 			try {
-				await wait(2_000);
 				if (!newlyCreated || !ASSISTCHANNELS.includes(thread.parentId ?? "")) continue;
+				await wait(2_000);
+				const parts: string[] = [];
+
+				if (thread.parent?.name.includes("voice")) {
+					parts.push(
+						"- What are your intents? `GuildVoiceStates` is **required** to receive voice data!",
+						"- Show what dependencies you are using -- `generateDependencyReport()` is exported from `@discordjs/voice`.",
+						"- Try looking at common examples: <https://github.com/discordjs/voice-examples>.",
+					);
+				} else if (thread.parent?.name.includes("djs")) {
+					parts.push(
+						"- What's your exact discord.js `npm list discord.js` and node `node -v` version?",
+						"- Not a discord.js issue? Check out <#1081585952654360687>.",
+					);
+				}
+
+				parts.push(
+					"- Consider reading <#1115899560183730286> to improve your question!",
+					"- Explain what exactly your issue is.",
+					"- Post the full error stack trace, not just the top part!",
+					"- Show your code!",
+					"- Issue solved? Press the button!",
+				);
 
 				await thread.send({
-					content: [
-						"• What's your exact discord.js `npm list discord.js` and node `node -v` version?",
-						"• Post the full error stack trace, not just the top part!",
-						"• Show your code!",
-						"• Explain what exactly your issue is.",
-						"• Not a discord.js issue? Check out <#237743386864517122>.",
-					].join("\n"),
+					content: parts.join("\n"),
+					components: [
+						{
+							type: ComponentType.ActionRow,
+							components: [
+								{
+									type: ComponentType.Button,
+									customId: "solved",
+									style: ButtonStyle.Primary,
+									label: "Mark post as solved",
+								},
+							],
+						},
+					],
 				});
 			} catch (error_) {
 				const error = error_ as Error;
