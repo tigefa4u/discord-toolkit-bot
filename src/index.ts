@@ -20,6 +20,7 @@ import { ComponentType, InteractionType } from "discord-api-types/v9";
 import { pino } from "pino";
 import { IntentsLookupContextCommand } from "./interactions/context/intentsLookupContext.js";
 import { BitfieldLookupCommand } from "./interactions/slash/bitfieldLookup.js";
+import { PolicyCommand } from "./interactions/slash/policy.js";
 import { formatBits, parseBits } from "./util/bits.js";
 import { ASSISTCHANNELS, SUPPORT_CHANNEL, SUPPORT_CHANNEL_VOICE } from "./util/constants.js";
 
@@ -301,6 +302,31 @@ client.on(GatewayDispatchEvents.InteractionCreate, async ({ data: interaction })
 				components: [formatted],
 			});
 
+			return;
+		}
+
+		if (interaction.data.type === ApplicationCommandType.ChatInput && interaction.data.name === PolicyCommand.name) {
+			await client.api.interactions.reply(interaction.id, interaction.token, {
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [
+					{
+						type: ComponentType.Section,
+						components: [
+							{
+								type: ComponentType.TextDisplay,
+								content:
+									"This app processes message content in order to provide automated responses and hide intrusive link embeds. It does not persist any user data.",
+							},
+						],
+						accessory: {
+							type: ComponentType.Button,
+							style: ButtonStyle.Link,
+							url: "https://github.com/discordjs/discord-toolkit-bot/blob/main/PRIVACY.md",
+							label: "Privacy Policy",
+						},
+					},
+				],
+			});
 			return;
 		}
 	}

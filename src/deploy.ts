@@ -4,13 +4,14 @@ import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import { IntentsLookupContextCommand } from "./interactions/context/intentsLookupContext.js";
 import { BitfieldLookupCommand } from "./interactions/slash/bitfieldLookup.js";
+import { PolicyCommand } from "./interactions/slash/policy.js";
 
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
 
 try {
 	console.info("Start refreshing interaction (/) commands.");
 
-	const body: unknown[] = [IntentsLookupContextCommand, BitfieldLookupCommand];
+	const body: unknown[] = [IntentsLookupContextCommand, BitfieldLookupCommand, PolicyCommand];
 
 	await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID!), {
 		body,
