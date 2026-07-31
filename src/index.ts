@@ -18,6 +18,7 @@ import {
 } from "discord-api-types/v10";
 import { ComponentType, InteractionType } from "discord-api-types/v9";
 import { pino } from "pino";
+import { DeleteCommandResponseContextCommand } from "./interactions/context/deleteCommandResponseContext.js";
 import { IntentsLookupContextCommand } from "./interactions/context/intentsLookupContext.js";
 import { BitfieldLookupCommand } from "./interactions/slash/bitfieldLookup.js";
 import { PolicyCommand } from "./interactions/slash/policy.js";
@@ -219,10 +220,7 @@ client.on(GatewayDispatchEvents.InteractionCreate, async ({ data: interaction })
 	}
 
 	if (interaction.type === InteractionType.ApplicationCommand) {
-		if (
-			interaction.data.type === ApplicationCommandType.Message &&
-			interaction.data.name === IntentsLookupContextCommand.name
-		) {
+		if (interaction.data.type === ApplicationCommandType.Message) {
 			const messages = interaction.data.resolved.messages;
 			const message = messages[interaction.data.target_id];
 
@@ -231,103 +229,136 @@ client.on(GatewayDispatchEvents.InteractionCreate, async ({ data: interaction })
 				return;
 			}
 
-			const res =
-				/intents:.*?(?<bits>\d{1,10})/gi.exec(message.content) ??
-				/intents\((?<bits>\d{1,10})\)/gi.exec(message.content) ??
-				/intents.*?(?<bits>\d{1,10})/gi.exec(message.content) ??
-				/(?:^|[\s`])(?<bits>\d{1,10}?)(?:$|[\s`])/gi.exec(message.content);
+			if (interaction.data.name === DeleteCommandResponseContextCommand.name) {
+				const user = interaction.member?.user ?? interaction.user;
+				const commandauthorId = message.interaction_metadata?.user?.id;
 
-			if (!res) {
-				await client.api.interactions.reply(interaction.id, interaction.token, {
-					flags: MessageFlags.Ephemeral,
-					content: "Cannot find any potential Gateway Intent numerals in this message.",
-				});
+				if (user?.id !== commandauthorId) {
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: "You can only delete your own command responses.",
+					});
+					return;
+				}
+
+				try {
+					await client.api.channels.deleteMessage(message.channel_id, message.id, {
+						reason: "Command response deleted by author.",
+					});
+
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: "Command response deleted!",
+					});
+				} catch (_error) {
+					const error = _error as Error;
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: `Something went wrong here: ${inlineCode(error.message)}.`,
+					});
+				}
+
 				return;
 			}
 
-			const _bits = Number.parseInt(res[1]!, 10);
-			const bits = Number.isNaN(_bits) ? null : parseBits(_bits);
+			if (interaction.data.name === IntentsLookupContextCommand.name) {
+				const res =
+					/intents:.*?(?<bits>\d{1,10})/gi.exec(message.content) ??
+					/intents\((?<bits>\d{1,10})\)/gi.exec(message.content) ??
+					/intents.*?(?<bits>\d{1,10})/gi.exec(message.content) ??
+					/(?:^|[\s`])(?<bits>\d{1,10}?)(?:$|[\s`])/gi.exec(message.content);
 
-			if (!bits) {
+				if (!res) {
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: "Cannot find any potential Gateway Intent numerals in this message.",
+					});
+					return;
+				}
+
+				const _bits = Number.parseInt(res[1]!, 10);
+				const bits = Number.isNaN(_bits) ? null : parseBits(_bits);
+
+				if (!bits) {
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: "Found a structure with expected Gatway Intents but could not resolve it.",
+					});
+					return;
+				}
+
+				const formatted = formatBits(bits);
 				await client.api.interactions.reply(interaction.id, interaction.token, {
-					flags: MessageFlags.Ephemeral,
-					content: "Found a structure with expected Gatway Intents but could not resolve it.",
+					flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+					components: [formatted],
 				});
 				return;
 			}
-
-			const formatted = formatBits(bits);
-			await client.api.interactions.reply(interaction.id, interaction.token, {
-				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-				components: [formatted],
-			});
-			return;
 		}
 
-		if (
-			interaction.data.type === ApplicationCommandType.ChatInput &&
-			interaction.data.name === BitfieldLookupCommand.name
-		) {
-			const sub = interaction.data.options?.[0];
+		if (interaction.data.type === ApplicationCommandType.ChatInput) {
+			if (interaction.data.name === BitfieldLookupCommand.name) {
+				const sub = interaction.data.options?.[0];
 
-			if (sub?.type !== ApplicationCommandOptionType.Subcommand) {
-				return;
-			}
+				if (sub?.type !== ApplicationCommandOptionType.Subcommand) {
+					return;
+				}
 
-			const bitsOption = sub.options?.[0];
-			if (bitsOption?.name !== "bitfield") {
-				return;
-			}
+				const bitsOption = sub.options?.[0];
+				if (bitsOption?.name !== "bitfield") {
+					return;
+				}
 
-			const _bits = bitsOption.value;
+				const _bits = bitsOption.value;
 
-			if (typeof _bits === "boolean") {
-				return;
-			}
+				if (typeof _bits === "boolean") {
+					return;
+				}
 
-			const parsedBits = parseBits(_bits);
+				const parsedBits = parseBits(_bits);
 
-			if (!parsedBits) {
+				if (!parsedBits) {
+					await client.api.interactions.reply(interaction.id, interaction.token, {
+						flags: MessageFlags.Ephemeral,
+						content: `Could not resolve ${inlineCode(String(_bits))} to a supported bit field.`,
+					});
+					return;
+				}
+
+				const formatted = formatBits(parsedBits);
+
 				await client.api.interactions.reply(interaction.id, interaction.token, {
-					flags: MessageFlags.Ephemeral,
-					content: `Could not resolve ${inlineCode(String(_bits))} to a supported bit field.`,
+					flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+					components: [formatted],
 				});
+
 				return;
 			}
 
-			const formatted = formatBits(parsedBits);
-
-			await client.api.interactions.reply(interaction.id, interaction.token, {
-				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-				components: [formatted],
-			});
-
-			return;
-		}
-
-		if (interaction.data.type === ApplicationCommandType.ChatInput && interaction.data.name === PolicyCommand.name) {
-			await client.api.interactions.reply(interaction.id, interaction.token, {
-				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-				components: [
-					{
-						type: ComponentType.Section,
-						components: [
-							{
-								type: ComponentType.TextDisplay,
-								content:
-									"This app processes message content in order to provide automated responses and hide intrusive link embeds. It does not persist any user data.",
+			if (interaction.data.name === PolicyCommand.name) {
+				await client.api.interactions.reply(interaction.id, interaction.token, {
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+					components: [
+						{
+							type: ComponentType.Section,
+							components: [
+								{
+									type: ComponentType.TextDisplay,
+									content:
+										"This app processes message content in order to provide automated responses and hide intrusive link embeds. It does not persist any user data.",
+								},
+							],
+							accessory: {
+								type: ComponentType.Button,
+								style: ButtonStyle.Link,
+								url: "https://github.com/discordjs/discord-toolkit-bot/blob/main/PRIVACY.md",
+								label: "Privacy Policy",
 							},
-						],
-						accessory: {
-							type: ComponentType.Button,
-							style: ButtonStyle.Link,
-							url: "https://github.com/discordjs/discord-toolkit-bot/blob/main/PRIVACY.md",
-							label: "Privacy Policy",
 						},
-					},
-				],
-			});
-			return;
+					],
+				});
+				return;
+			}
 		}
 	}
 
