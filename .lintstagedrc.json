@@ -1,4 +1,4 @@
 {
-	"*": "prettier --ignore-unknown --write",
-	"**/src/**.{mjs,js,ts}": "eslint --ext mjs,js,ts --fix"
+  "*": "oxfmt",
+  "**/src/**.{mjs,js,ts}": "oxlint --fix"
 }

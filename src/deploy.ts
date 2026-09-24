@@ -10,21 +10,21 @@ import { PolicyCommand } from "./interactions/slash/policy.js";
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
 
 try {
-	console.info("Start refreshing interaction (/) commands.");
+  console.info("Start refreshing interaction (/) commands.");
 
-	const body: unknown[] = [
-		IntentsLookupContextCommand,
-		BitfieldLookupCommand,
-		PolicyCommand,
-		DeleteCommandResponseContextCommand,
-	];
+  const body: unknown[] = [
+    IntentsLookupContextCommand,
+    BitfieldLookupCommand,
+    PolicyCommand,
+    DeleteCommandResponseContextCommand,
+  ];
 
-	await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID!), {
-		body,
-	});
+  await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID!), {
+    body,
+  });
 
-	console.info(`Successfully reloaded interaction commands.`);
+  console.info(`Successfully reloaded interaction commands.`);
 } catch (error_) {
-	const error = error_ as Error;
-	console.error(error.message, error);
+  const error = error_ as Error;
+  console.error(error.message, error);
 }
